@@ -1,0 +1,1 @@
+# tool-version-status-segments-for-tmux
