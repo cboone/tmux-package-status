@@ -20,9 +20,9 @@ tmux-asdf-status/
 1. **User adds `#{asdf_status}` to their `status-left` or `status-right`**
 2. **TPM loads `asdf-status.tmux`** which replaces the placeholder with:
    ```
-   #($PLUGIN_DIR/scripts/asdf_status.sh "#{pane_current_path}")
+   #($PLUGIN_DIR/scripts/asdf_status.sh)
    ```
-3. **tmux calls `asdf_status.sh`** with the pane's current directory
+3. **tmux calls `asdf_status.sh`** which retrieves `pane_current_path` directly via `tmux display-message -p`
 4. **Script finds `.tool-versions`** by walking up the directory tree
 5. **Script compares local vs global versions** and filters based on config
 6. **Script outputs formatted string** with tool names, versions, icons, colors
@@ -30,7 +30,7 @@ tmux-asdf-status/
 ## Core Algorithm
 
 ```
-1. Receive pane_current_path as argument
+1. Retrieve pane_current_path via `tmux display-message -p "#{pane_current_path}"`
 2. Walk up directory tree looking for .tool-versions
 3. If not found, exit with empty output
 4. Parse local .tool-versions into tool=version pairs
@@ -55,7 +55,7 @@ tmux-asdf-status/
 | `@asdf_icon_<tool>` | `""` | Icon for specific tool (e.g., `@asdf_icon_python`) |
 | `@asdf_color_<tool>` | `""` | Color for specific tool as `fg[,bg]` |
 | `@asdf_default_icon` | `""` | Default icon when tool has no specific icon |
-| `@asdf_default_style` | `""` | Default color when tool has no specific color |
+| `@asdf_default_color` | `""` | Default color when tool has no specific color, as `fg[,bg]` |
 
 ## Implementation Phases
 
@@ -90,7 +90,7 @@ tmux-asdf-status/
 
 ```tmux
 # Install plugin
-set -g @plugin 'username/tmux-asdf-status'
+set -g @plugin 'your-username/tmux-asdf-status'
 
 # Add to status line
 set -g status-right '#{asdf_status} | %H:%M'
