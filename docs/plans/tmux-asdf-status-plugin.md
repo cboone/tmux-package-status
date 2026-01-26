@@ -27,6 +27,51 @@ tmux-asdf-status/
 5. **Script compares local vs global versions** and filters based on config
 6. **Script outputs formatted string** with tool names, versions, icons, colors
 
+## Performance
+
+The status line may update once per second. To avoid lag, the plugin uses several optimizations:
+
+### Caching Strategy
+
+Results are cached in `/tmp/tmux-asdf-status/` with files keyed by directory path hash:
+- **Cache file**: Contains the formatted output string
+- **TTL**: Configurable via `@asdf_cache_ttl` (default: 5 seconds)
+- **Invalidation**: Cache is invalidated when `.tool-versions` mtime changes
+
+```
+1. Compute cache key from pane_current_path
+2. If cache file exists AND is younger than TTL AND .tool-versions mtime unchanged:
+   → Return cached output immediately (fast path)
+3. Otherwise: regenerate output, write to cache, return
+```
+
+### Early Exits
+
+The script exits as fast as possible when there's nothing to display:
+- No `.tool-versions` in directory tree → exit with empty output (no cache write)
+- Cache hit → return cached value without any file parsing
+
+### Minimizing Expensive Operations
+
+| Operation | Cost | Mitigation |
+|-----------|------|------------|
+| `tmux display-message` | Fork + IPC | Called once per invocation |
+| `tmux show-option` | Fork + IPC | Batch fetch all options once at startup, cache in variables |
+| Directory walking | Filesystem I/O | Stop at filesystem root or home directory |
+| File parsing | Disk read | Only when cache invalid |
+
+### Configuration
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `@asdf_cache_ttl` | `5` | Seconds before cache expires |
+
+### Expected Performance
+
+- **Cache hit**: < 10ms (stat cache file + read)
+- **Cache miss**: ~50-100ms (directory walk + file parse + tmux options)
+- **No .tool-versions**: < 20ms (directory walk only)
+
 ## Core Algorithm
 
 ```
@@ -56,6 +101,7 @@ tmux-asdf-status/
 | `@asdf_color_<tool>` | `""` | Color for specific tool as `fg[,bg]` |
 | `@asdf_default_icon` | `""` | Default icon when tool has no specific icon |
 | `@asdf_default_color` | `""` | Default color when tool has no specific color, as `fg[,bg]` |
+| `@asdf_cache_ttl` | `5` | Seconds before cached output expires |
 
 ## Implementation Phases
 
@@ -67,6 +113,7 @@ tmux-asdf-status/
   - Directory walking to find `.tool-versions`
   - File parsing
   - Basic output (tool version pairs)
+  - Result caching with TTL and mtime invalidation
 
 ### Phase 2: Filtering & Comparison
 - Add global version loading from `~/.tool-versions`
@@ -122,3 +169,4 @@ set -g @asdf_separator " | "
 4. **Test filtering**: Set `@asdf_show_global off` and verify global-matching tools are hidden
 5. **Test formatting**: Configure icons/colors and verify output
 6. **Test parent directory detection**: Navigate to subdirectory and verify versions still show
+7. **Test performance**: Run `time scripts/asdf_status.sh` twice; second run should be < 20ms (cache hit)
