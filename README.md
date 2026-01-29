@@ -15,10 +15,23 @@ Display package version information in your tmux status bar. Automatically detec
 
 ## Supported Package Managers
 
+### Multi-Tool Version Managers
+
+The plugin has first-class support for unified version managers that handle multiple tools:
+
+| Tool | Files Detected | Description |
+|------|---------------|-------------|
+| **asdf** | `.tool-versions` | Universal version manager |
+| **mise** | `.mise.toml`, `.mise.local.toml`, `.rtx.toml` | Polyglot runtime manager (formerly rtx) |
+
+When these files are present, they take priority over individual version files.
+
+### Individual Package Managers
+
 | Language | Files Detected | Icon |
 |----------|---------------|------|
 | Node.js | `package.json`, `.nvmrc`, `.node-version` | ⬢ |
-| Go | `go.mod` | 🐹 |
+| Go | `go.mod`, `.go-version` | 🐹 |
 | Rust | `Cargo.toml`, `rust-toolchain.toml` | 🦀 |
 | Python | `pyproject.toml`, `.python-version`, `Pipfile` | 🐍 |
 | Ruby | `Gemfile`, `.ruby-version` | 💎 |
@@ -26,6 +39,7 @@ Display package version information in your tmux status bar. Automatically detec
 | Java | `pom.xml`, `build.gradle` | ☕ |
 | .NET | `*.csproj`, `global.json` | 🔷 |
 | Elixir | `mix.exs` | 💧 |
+| Erlang | (via asdf/mise) | 📡 |
 | Deno | `deno.json` | 🦕 |
 | Bun | `bun.lockb`, `bunfig.toml` | 🥟 |
 | Zig | `build.zig`, `build.zig.zon` | ⚡ |
@@ -36,6 +50,9 @@ Display package version information in your tmux status bar. Automatically detec
 | Clojure | `project.clj`, `deps.edn` | λ |
 | Lua | `*.rockspec` | 🌙 |
 | Perl | `cpanfile`, `Makefile.PL` | 🐪 |
+| Terraform | (via asdf/mise) | 🏗️ |
+| kubectl | (via asdf/mise) | ☸️ |
+| Helm | (via asdf/mise) | ⎈ |
 
 ## Installation
 

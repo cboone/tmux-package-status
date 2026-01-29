@@ -26,13 +26,21 @@ var KnownFiles = map[string]struct {
 	Type     string
 	Priority int
 }{
+	// Multi-tool version managers (highest priority - these override individual files)
+	// These are handled specially in Detect() to extract multiple versions
+	".tool-versions":   {"tool-versions", 1},
+	".mise.toml":       {"mise", 2},
+	".mise.local.toml": {"mise", 2},
+	".rtx.toml":        {"mise", 2},
+
 	// Node.js ecosystem
 	"package.json":  {"node", 10},
 	".nvmrc":        {"node", 11},
 	".node-version": {"node", 12},
 
 	// Go
-	"go.mod": {"go", 20},
+	"go.mod":      {"go", 20},
+	".go-version": {"go", 21},
 
 	// Rust
 	"Cargo.toml": {"rust", 30},

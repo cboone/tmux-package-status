@@ -41,6 +41,9 @@ func (p *Parser) Parse(pf detector.PackageFile) (*VersionInfo, error) {
 	var err error
 
 	switch pf.Type {
+	case "tool-versions", "mise":
+		// These are multi-tool files, use ParseMulti instead
+		return nil, nil
 	case "node":
 		version, source, err = p.parseNode(pf)
 	case "go":
@@ -100,6 +103,234 @@ func (p *Parser) Parse(pf detector.PackageFile) (*VersionInfo, error) {
 	}, nil
 }
 
+// ParseMulti extracts multiple version infos from multi-tool files like .tool-versions
+func (p *Parser) ParseMulti(pf detector.PackageFile) ([]*VersionInfo, error) {
+	switch pf.Type {
+	case "tool-versions":
+		return p.parseToolVersions(pf)
+	case "mise":
+		return p.parseMise(pf)
+	default:
+		// Fall back to single parse
+		v, err := p.Parse(pf)
+		if err != nil || v == nil {
+			return nil, err
+		}
+		return []*VersionInfo{v}, nil
+	}
+}
+
+// parseToolVersions parses .tool-versions files (asdf/mise format)
+// Format: tool_name version [version2 ...]
+func (p *Parser) parseToolVersions(pf detector.PackageFile) ([]*VersionInfo, error) {
+	content, err := os.ReadFile(pf.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	var versions []*VersionInfo
+	lines := strings.Split(string(content), "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.Fields(line)
+		if len(parts) < 2 {
+			continue
+		}
+
+		toolName := parts[0]
+		version := parts[1]
+
+		// Map asdf/mise tool names to our internal types
+		internalType := mapToolName(toolName)
+		if internalType == "" {
+			continue
+		}
+
+		versions = append(versions, &VersionInfo{
+			Type:     internalType,
+			Version:  version,
+			Source:   ".tool-versions",
+			Priority: pf.Priority,
+		})
+	}
+
+	return versions, nil
+}
+
+// parseMise parses .mise.toml files
+// Format: [tools]\nnodejs = "18.17.0"\npython = "3.11"
+func (p *Parser) parseMise(pf detector.PackageFile) ([]*VersionInfo, error) {
+	content, err := os.ReadFile(pf.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	var versions []*VersionInfo
+	contentStr := string(content)
+
+	// Simple TOML parsing for [tools] section
+	// Look for patterns like: tool_name = "version" or tool_name = ["version1", "version2"]
+	inToolsSection := false
+	lines := strings.Split(contentStr, "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Check for section headers
+		if strings.HasPrefix(line, "[") {
+			inToolsSection = strings.HasPrefix(line, "[tools]")
+			continue
+		}
+
+		if !inToolsSection {
+			continue
+		}
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Split on first =
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		toolName := strings.TrimSpace(parts[0])
+		valueStr := strings.TrimSpace(parts[1])
+
+		var version string
+
+		// Handle array format: ["version1", "version2"]
+		if strings.HasPrefix(valueStr, "[") {
+			// Extract first element from array
+			re := regexp.MustCompile(`\[\s*"([^"]+)"`)
+			if matches := re.FindStringSubmatch(valueStr); len(matches) > 1 {
+				version = matches[1]
+			} else {
+				// Try without quotes
+				re = regexp.MustCompile(`\[\s*([^\s,\]]+)`)
+				if matches := re.FindStringSubmatch(valueStr); len(matches) > 1 {
+					version = matches[1]
+				}
+			}
+		} else {
+			// Handle simple format: "version" or version
+			version = strings.Trim(valueStr, `"'`)
+		}
+
+		if version == "" {
+			continue
+		}
+
+		internalType := mapToolName(toolName)
+		if internalType == "" {
+			continue
+		}
+
+		versions = append(versions, &VersionInfo{
+			Type:     internalType,
+			Version:  version,
+			Source:   pf.Filename,
+			Priority: pf.Priority,
+		})
+	}
+
+	return versions, nil
+}
+
+// mapToolName converts asdf/mise tool names to internal type names
+func mapToolName(toolName string) string {
+	// Map of asdf/mise plugin names to our internal types
+	mapping := map[string]string{
+		// Node.js variants
+		"nodejs":  "node",
+		"node":    "node",
+		"npm":     "node",
+
+		// Go variants
+		"golang": "go",
+		"go":     "go",
+
+		// Python variants
+		"python":  "python",
+		"python3": "python",
+
+		// Ruby
+		"ruby": "ruby",
+
+		// Rust
+		"rust":  "rust",
+		"cargo": "rust",
+
+		// PHP
+		"php": "php",
+
+		// Java variants
+		"java":    "java",
+		"openjdk": "java",
+		"adoptopenjdk": "java",
+		"temurin": "java",
+
+		// .NET
+		"dotnet":      "dotnet",
+		"dotnet-core": "dotnet",
+
+		// Elixir/Erlang
+		"elixir": "elixir",
+		"erlang": "erlang",
+
+		// Deno
+		"deno": "deno",
+
+		// Bun
+		"bun": "bun",
+
+		// Zig
+		"zig": "zig",
+
+		// Swift
+		"swift": "swift",
+
+		// Kotlin
+		"kotlin": "kotlin",
+
+		// Scala
+		"scala": "scala",
+
+		// Haskell
+		"haskell": "haskell",
+		"ghc":     "haskell",
+
+		// Clojure
+		"clojure": "clojure",
+
+		// Lua
+		"lua":      "lua",
+		"luajit":   "lua",
+
+		// Perl
+		"perl": "perl",
+
+		// Additional tools
+		"terraform": "terraform",
+		"kubectl":   "kubectl",
+		"helm":      "helm",
+	}
+
+	if internal, ok := mapping[strings.ToLower(toolName)]; ok {
+		return internal
+	}
+	return ""
+}
+
 // parseNode extracts Node.js version from package files
 func (p *Parser) parseNode(pf detector.PackageFile) (string, string, error) {
 	switch pf.Filename {
@@ -134,9 +365,19 @@ func (p *Parser) parseNode(pf detector.PackageFile) (string, string, error) {
 	return p.getCommandVersion("node", "--version", "v")
 }
 
-// parseGo extracts Go version from go.mod
+// parseGo extracts Go version from go.mod or .go-version
 func (p *Parser) parseGo(pf detector.PackageFile) (string, string, error) {
-	if pf.Filename == "go.mod" {
+	switch pf.Filename {
+	case ".go-version":
+		content, err := os.ReadFile(pf.Path)
+		if err != nil {
+			return "", "", err
+		}
+		version := strings.TrimSpace(string(content))
+		version = strings.TrimPrefix(version, "go")
+		return version, ".go-version", nil
+
+	case "go.mod":
 		content, err := os.ReadFile(pf.Path)
 		if err != nil {
 			return "", "", err

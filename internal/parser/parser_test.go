@@ -654,3 +654,278 @@ func TestParse_FileNotFound(t *testing.T) {
 		t.Error("expected error for nonexistent file")
 	}
 }
+
+func TestParseToolVersions(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tmux-pkg-parse-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	toolVersions := `# This is a comment
+nodejs 18.17.0
+python 3.11.5
+ruby 3.2.2
+golang 1.21.0
+`
+	path := filepath.Join(tmpDir, ".tool-versions")
+	if err := os.WriteFile(path, []byte(toolVersions), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+
+	p := New()
+	pf := detector.PackageFile{
+		Type:     "tool-versions",
+		Path:     path,
+		Filename: ".tool-versions",
+		Priority: 1,
+	}
+
+	versions, err := p.ParseMulti(pf)
+	if err != nil {
+		t.Fatalf("ParseMulti() failed: %v", err)
+	}
+
+	if len(versions) != 4 {
+		t.Errorf("expected 4 versions, got %d", len(versions))
+	}
+
+	// Check that tools were parsed correctly
+	typeVersions := make(map[string]string)
+	for _, v := range versions {
+		typeVersions[v.Type] = v.Version
+	}
+
+	if typeVersions["node"] != "18.17.0" {
+		t.Errorf("expected node version '18.17.0', got '%s'", typeVersions["node"])
+	}
+	if typeVersions["python"] != "3.11.5" {
+		t.Errorf("expected python version '3.11.5', got '%s'", typeVersions["python"])
+	}
+	if typeVersions["ruby"] != "3.2.2" {
+		t.Errorf("expected ruby version '3.2.2', got '%s'", typeVersions["ruby"])
+	}
+	if typeVersions["go"] != "1.21.0" {
+		t.Errorf("expected go version '1.21.0', got '%s'", typeVersions["go"])
+	}
+}
+
+func TestParseToolVersions_MultipleVersions(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tmux-pkg-parse-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// asdf supports multiple versions per tool
+	toolVersions := `nodejs 18.17.0 20.10.0
+python 3.11.5
+`
+	path := filepath.Join(tmpDir, ".tool-versions")
+	if err := os.WriteFile(path, []byte(toolVersions), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+
+	p := New()
+	pf := detector.PackageFile{
+		Type:     "tool-versions",
+		Path:     path,
+		Filename: ".tool-versions",
+		Priority: 1,
+	}
+
+	versions, err := p.ParseMulti(pf)
+	if err != nil {
+		t.Fatalf("ParseMulti() failed: %v", err)
+	}
+
+	// Should take first version for node
+	typeVersions := make(map[string]string)
+	for _, v := range versions {
+		typeVersions[v.Type] = v.Version
+	}
+
+	if typeVersions["node"] != "18.17.0" {
+		t.Errorf("expected node version '18.17.0' (first listed), got '%s'", typeVersions["node"])
+	}
+}
+
+func TestParseMise(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tmux-pkg-parse-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	miseToml := `[tools]
+nodejs = "18.17.0"
+python = "3.11.5"
+golang = "1.21"
+`
+	path := filepath.Join(tmpDir, ".mise.toml")
+	if err := os.WriteFile(path, []byte(miseToml), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+
+	p := New()
+	pf := detector.PackageFile{
+		Type:     "mise",
+		Path:     path,
+		Filename: ".mise.toml",
+		Priority: 2,
+	}
+
+	versions, err := p.ParseMulti(pf)
+	if err != nil {
+		t.Fatalf("ParseMulti() failed: %v", err)
+	}
+
+	if len(versions) != 3 {
+		t.Errorf("expected 3 versions, got %d", len(versions))
+	}
+
+	typeVersions := make(map[string]string)
+	for _, v := range versions {
+		typeVersions[v.Type] = v.Version
+	}
+
+	if typeVersions["node"] != "18.17.0" {
+		t.Errorf("expected node version '18.17.0', got '%s'", typeVersions["node"])
+	}
+	if typeVersions["python"] != "3.11.5" {
+		t.Errorf("expected python version '3.11.5', got '%s'", typeVersions["python"])
+	}
+	if typeVersions["go"] != "1.21" {
+		t.Errorf("expected go version '1.21', got '%s'", typeVersions["go"])
+	}
+}
+
+func TestParseMise_ArrayFormat(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tmux-pkg-parse-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// mise also supports array format
+	miseToml := `[tools]
+nodejs = ["18.17.0", "20.10.0"]
+python = "3.11.5"
+`
+	path := filepath.Join(tmpDir, ".mise.toml")
+	if err := os.WriteFile(path, []byte(miseToml), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+
+	p := New()
+	pf := detector.PackageFile{
+		Type:     "mise",
+		Path:     path,
+		Filename: ".mise.toml",
+		Priority: 2,
+	}
+
+	versions, err := p.ParseMulti(pf)
+	if err != nil {
+		t.Fatalf("ParseMulti() failed: %v", err)
+	}
+
+	typeVersions := make(map[string]string)
+	for _, v := range versions {
+		typeVersions[v.Type] = v.Version
+	}
+
+	// Should take first version from array
+	if typeVersions["node"] != "18.17.0" {
+		t.Errorf("expected node version '18.17.0' (first in array), got '%s'", typeVersions["node"])
+	}
+}
+
+func TestParseGo_GoVersion(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tmux-pkg-parse-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	path := filepath.Join(tmpDir, ".go-version")
+	if err := os.WriteFile(path, []byte("1.21.5"), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+
+	p := New()
+	pf := detector.PackageFile{
+		Type:     "go",
+		Path:     path,
+		Filename: ".go-version",
+		Priority: 21,
+	}
+
+	v, err := p.Parse(pf)
+	if err != nil {
+		t.Fatalf("Parse() failed: %v", err)
+	}
+
+	if v.Version != "1.21.5" {
+		t.Errorf("expected version '1.21.5', got '%s'", v.Version)
+	}
+}
+
+func TestParseGo_GoVersionWithPrefix(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tmux-pkg-parse-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Some tools prefix with "go"
+	path := filepath.Join(tmpDir, ".go-version")
+	if err := os.WriteFile(path, []byte("go1.21.5"), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+
+	p := New()
+	pf := detector.PackageFile{
+		Type:     "go",
+		Path:     path,
+		Filename: ".go-version",
+		Priority: 21,
+	}
+
+	v, err := p.Parse(pf)
+	if err != nil {
+		t.Fatalf("Parse() failed: %v", err)
+	}
+
+	// Should strip "go" prefix
+	if v.Version != "1.21.5" {
+		t.Errorf("expected version '1.21.5', got '%s'", v.Version)
+	}
+}
+
+func TestMapToolName(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"nodejs", "node"},
+		{"node", "node"},
+		{"golang", "go"},
+		{"go", "go"},
+		{"python", "python"},
+		{"python3", "python"},
+		{"ruby", "ruby"},
+		{"rust", "rust"},
+		{"java", "java"},
+		{"openjdk", "java"},
+		{"unknown", ""},
+		{"NODEJS", "node"}, // case insensitive
+	}
+
+	for _, tc := range tests {
+		result := mapToolName(tc.input)
+		if result != tc.expected {
+			t.Errorf("mapToolName(%q) = %q, expected %q", tc.input, result, tc.expected)
+		}
+	}
+}

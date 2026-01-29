@@ -223,8 +223,33 @@ func run(cfg *config.Config) (string, error) {
 	// Parse versions
 	p := parser.New()
 	var versions []*parser.VersionInfo
+	seen := make(map[string]bool) // track seen types to avoid duplicates
+
 	for _, file := range files {
+		// Handle multi-tool files (tool-versions, mise) specially
+		if file.Type == "tool-versions" || file.Type == "mise" {
+			multiVersions, err := p.ParseMulti(file)
+			if err != nil {
+				continue
+			}
+			for _, v := range multiVersions {
+				if !cfg.IsManagerEnabled(v.Type) {
+					continue
+				}
+				if !seen[v.Type] {
+					versions = append(versions, v)
+					seen[v.Type] = true
+				}
+			}
+			continue
+		}
+
 		if !cfg.IsManagerEnabled(file.Type) {
+			continue
+		}
+
+		// Skip if we already have this type from a multi-tool file
+		if seen[file.Type] {
 			continue
 		}
 
@@ -235,6 +260,7 @@ func run(cfg *config.Config) (string, error) {
 		}
 		if v != nil {
 			versions = append(versions, v)
+			seen[v.Type] = true
 		}
 	}
 
