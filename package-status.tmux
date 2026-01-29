@@ -18,91 +18,44 @@ get_tmux_option() {
     fi
 }
 
-# Set environment variables from tmux options
+# Set tmux global environment variables from tmux options
+# Using tmux set-environment -g so subprocess commands can access them
 setup_env_from_tmux_options() {
+    # Helper to set or unset tmux environment variable
+    set_tmux_env() {
+        local env_name="$1"
+        local value="$2"
+        if [[ -n "$value" ]]; then
+            tmux set-environment -g "$env_name" "$value"
+        else
+            tmux set-environment -gu "$env_name" 2>/dev/null || true
+        fi
+    }
+
     # Directory to scan
-    local dir
-    dir="$(get_tmux_option "@package-status-dir" "")"
-    if [[ -n "$dir" ]]; then
-        export TMUX_PKG_DIR="$dir"
-    fi
+    set_tmux_env "TMUX_PKG_DIR" "$(get_tmux_option "@package-status-dir" "")"
 
     # Output format
-    local format
-    format="$(get_tmux_option "@package-status-format" "")"
-    if [[ -n "$format" ]]; then
-        export TMUX_PKG_FORMAT="$format"
-    fi
+    set_tmux_env "TMUX_PKG_FORMAT" "$(get_tmux_option "@package-status-format" "")"
 
     # Enabled managers
-    local managers
-    managers="$(get_tmux_option "@package-status-managers" "")"
-    if [[ -n "$managers" ]]; then
-        export TMUX_PKG_MANAGERS="$managers"
-    fi
+    set_tmux_env "TMUX_PKG_MANAGERS" "$(get_tmux_option "@package-status-managers" "")"
 
     # Max items
-    local max_items
-    max_items="$(get_tmux_option "@package-status-max-items" "")"
-    if [[ -n "$max_items" ]]; then
-        export TMUX_PKG_MAX_ITEMS="$max_items"
-    fi
+    set_tmux_env "TMUX_PKG_MAX_ITEMS" "$(get_tmux_option "@package-status-max-items" "")"
 
     # Cache TTL
-    local cache_ttl
-    cache_ttl="$(get_tmux_option "@package-status-cache-ttl" "")"
-    if [[ -n "$cache_ttl" ]]; then
-        export TMUX_PKG_CACHE_TTL="$cache_ttl"
-    fi
+    set_tmux_env "TMUX_PKG_CACHE_TTL" "$(get_tmux_option "@package-status-cache-ttl" "")"
 
     # Style options
-    local icon_color
-    icon_color="$(get_tmux_option "@package-status-icon-color" "")"
-    if [[ -n "$icon_color" ]]; then
-        export TMUX_PKG_ICON_COLOR="$icon_color"
-    fi
-
-    local version_color
-    version_color="$(get_tmux_option "@package-status-version-color" "")"
-    if [[ -n "$version_color" ]]; then
-        export TMUX_PKG_VERSION_COLOR="$version_color"
-    fi
-
-    local separator_color
-    separator_color="$(get_tmux_option "@package-status-separator-color" "")"
-    if [[ -n "$separator_color" ]]; then
-        export TMUX_PKG_SEPARATOR_COLOR="$separator_color"
-    fi
-
-    local show_icons
-    show_icons="$(get_tmux_option "@package-status-show-icons" "")"
-    if [[ -n "$show_icons" ]]; then
-        export TMUX_PKG_SHOW_ICON="$show_icons"
-    fi
-
-    local show_brackets
-    show_brackets="$(get_tmux_option "@package-status-show-brackets" "")"
-    if [[ -n "$show_brackets" ]]; then
-        export TMUX_PKG_SHOW_BRACKETS="$show_brackets"
-    fi
-
-    local separator
-    separator="$(get_tmux_option "@package-status-separator" "")"
-    if [[ -n "$separator" ]]; then
-        export TMUX_PKG_SEPARATOR="$separator"
-    fi
-
-    local prefix
-    prefix="$(get_tmux_option "@package-status-prefix" "")"
-    if [[ -n "$prefix" ]]; then
-        export TMUX_PKG_PREFIX="$prefix"
-    fi
-
-    local suffix
-    suffix="$(get_tmux_option "@package-status-suffix" "")"
-    if [[ -n "$suffix" ]]; then
-        export TMUX_PKG_SUFFIX="$suffix"
-    fi
+    set_tmux_env "TMUX_PKG_ICON_COLOR" "$(get_tmux_option "@package-status-icon-color" "")"
+    set_tmux_env "TMUX_PKG_VERSION_COLOR" "$(get_tmux_option "@package-status-version-color" "")"
+    set_tmux_env "TMUX_PKG_SEPARATOR_COLOR" "$(get_tmux_option "@package-status-separator-color" "")"
+    set_tmux_env "TMUX_PKG_SHOW_ICON" "$(get_tmux_option "@package-status-show-icons" "")"
+    set_tmux_env "TMUX_PKG_SHOW_BRACKETS" "$(get_tmux_option "@package-status-show-brackets" "")"
+    set_tmux_env "TMUX_PKG_SEPARATOR" "$(get_tmux_option "@package-status-separator" "")"
+    set_tmux_env "TMUX_PKG_PREFIX" "$(get_tmux_option "@package-status-prefix" "")"
+    set_tmux_env "TMUX_PKG_SUFFIX" "$(get_tmux_option "@package-status-suffix" "")"
 }
 
 # Define the format string for tmux
@@ -113,8 +66,10 @@ setup_format_string() {
     chmod +x "$script" 2>/dev/null || true
 
     # Set the format string that tmux will use
-    # Use #{pane_current_path} to get the directory of the active pane
-    tmux set-option -g @package-status "#($script -d '#{pane_current_path}')"
+    # The script runs in the pane's current directory via tmux, using $PWD
+    # We avoid passing #{pane_current_path} directly to prevent command injection
+    # from maliciously crafted directory names
+    tmux set-option -g @package-status "#($script)"
 }
 
 # Install binary if not present

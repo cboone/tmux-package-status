@@ -114,11 +114,12 @@ download_and_install() {
     local install_dir="$4"
 
     # Construct download URL
-    local filename="${BINARY_NAME}_${os}_${arch}"
+    # Windows uses .zip archives, others use .tar.gz
+    local archive_ext="tar.gz"
     if [[ "$os" == "windows" ]]; then
-        filename="${filename}.exe"
+        archive_ext="zip"
     fi
-    local archive_name="${BINARY_NAME}_${version#v}_${os}_${arch}.tar.gz"
+    local archive_name="${BINARY_NAME}_${version#v}_${os}_${arch}.${archive_ext}"
     local url="https://github.com/${GITHUB_REPO}/releases/download/${version}/${archive_name}"
 
     # Create temp directory
@@ -142,26 +143,38 @@ download_and_install() {
 
     print_step "Extracting archive..."
 
-    # Extract archive
-    tar -xzf "$archive_path" -C "$tmp_dir"
+    # Extract archive based on type
+    if [[ "$os" == "windows" ]]; then
+        if command -v unzip &>/dev/null; then
+            unzip -q "$archive_path" -d "$tmp_dir"
+        else
+            print_error "unzip is required to extract Windows archives"
+        fi
+    else
+        tar -xzf "$archive_path" -C "$tmp_dir"
+    fi
 
     # Create install directory if needed
     mkdir -p "$install_dir"
 
-    # Install binary
-    local binary_path="${tmp_dir}/${BINARY_NAME}"
+    # Install binary (Windows uses .exe extension)
+    local binary_name="${BINARY_NAME}"
+    local install_name="${BINARY_NAME}"
     if [[ "$os" == "windows" ]]; then
-        binary_path="${binary_path}.exe"
+        binary_name="${BINARY_NAME}.exe"
+        install_name="${BINARY_NAME}.exe"
     fi
+
+    local binary_path="${tmp_dir}/${binary_name}"
 
     if [[ ! -f "$binary_path" ]]; then
         print_error "Binary not found in archive"
     fi
 
     chmod +x "$binary_path"
-    mv "$binary_path" "${install_dir}/${BINARY_NAME}"
+    mv "$binary_path" "${install_dir}/${install_name}"
 
-    print_success "Installed to ${install_dir}/${BINARY_NAME}"
+    print_success "Installed to ${install_dir}/${install_name}"
 }
 
 # Add to PATH if needed

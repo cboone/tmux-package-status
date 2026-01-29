@@ -105,7 +105,8 @@ func (c *Cache) ClearAll() error {
 // getCacheFile returns the cache file path for a directory
 func (c *Cache) getCacheFile(dir string) string {
 	// Create a hash of the directory path
-	hash := md5.Sum([]byte(dir))
+	// MD5 is used here only for generating short, deterministic filenames, not for security
+	hash := md5.Sum([]byte(dir)) // #nosec G401 -- MD5 used for filename hashing, not cryptography
 	hashStr := hex.EncodeToString(hash[:])
 	return filepath.Join(c.cacheDir, hashStr+".json")
 }

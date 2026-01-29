@@ -4,6 +4,7 @@ package detector
 import (
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 // PackageFile represents a detected package manager file
@@ -124,56 +125,93 @@ func New(dir string) *Detector {
 	return &Detector{rootDir: dir}
 }
 
+// knownFileEntry represents a known file pattern with its metadata
+type knownFileEntry struct {
+	Pattern  string
+	Type     string
+	Priority int
+}
+
+// getSortedKnownFiles returns KnownFiles entries sorted by priority (lowest first)
+// This ensures deterministic iteration order for consistent file selection
+func getSortedKnownFiles() []knownFileEntry {
+	entries := make([]knownFileEntry, 0, len(KnownFiles))
+	for pattern, info := range KnownFiles {
+		entries = append(entries, knownFileEntry{
+			Pattern:  pattern,
+			Priority: info.Priority,
+			Type:     info.Type,
+		})
+	}
+	// Sort by priority (ascending), then by pattern for stability
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Priority != entries[j].Priority {
+			return entries[i].Priority < entries[j].Priority
+		}
+		return entries[i].Pattern < entries[j].Pattern
+	})
+	return entries
+}
+
 // Detect finds all package manager files in the directory
 func (d *Detector) Detect() ([]PackageFile, error) {
 	var results []PackageFile
 	seen := make(map[string]bool) // track seen types to avoid duplicates
 
-	// First check exact matches in root directory
-	for filename, info := range KnownFiles {
+	// Get sorted entries for deterministic iteration
+	sortedEntries := getSortedKnownFiles()
+
+	// First check exact matches in root directory (in priority order)
+	for _, entry := range sortedEntries {
 		// Skip glob patterns in first pass
-		if containsGlob(filename) {
+		if containsGlob(entry.Pattern) {
 			continue
 		}
 
-		fullPath := filepath.Join(d.rootDir, filename)
+		// Skip if we already have this type
+		if seen[entry.Type] {
+			continue
+		}
+
+		fullPath := filepath.Join(d.rootDir, entry.Pattern)
 		if _, err := os.Stat(fullPath); err == nil {
-			if !seen[info.Type] {
-				results = append(results, PackageFile{
-					Type:     info.Type,
-					Path:     fullPath,
-					Filename: filename,
-					Priority: info.Priority,
-				})
-				seen[info.Type] = true
-			}
+			results = append(results, PackageFile{
+				Type:     entry.Type,
+				Path:     fullPath,
+				Filename: entry.Pattern,
+				Priority: entry.Priority,
+			})
+			seen[entry.Type] = true
 		}
 	}
 
-	// Check glob patterns
-	for pattern, info := range KnownFiles {
-		if !containsGlob(pattern) {
+	// Check glob patterns (in priority order)
+	for _, entry := range sortedEntries {
+		if !containsGlob(entry.Pattern) {
 			continue
 		}
 
-		if seen[info.Type] {
+		if seen[entry.Type] {
 			continue
 		}
 
-		matches, err := filepath.Glob(filepath.Join(d.rootDir, pattern))
+		matches, err := filepath.Glob(filepath.Join(d.rootDir, entry.Pattern))
 		if err != nil {
 			continue
 		}
 
+		// Sort matches for deterministic selection
+		sort.Strings(matches)
+
 		for _, match := range matches {
-			if !seen[info.Type] {
+			if !seen[entry.Type] {
 				results = append(results, PackageFile{
-					Type:     info.Type,
+					Type:     entry.Type,
 					Path:     match,
 					Filename: filepath.Base(match),
-					Priority: info.Priority,
+					Priority: entry.Priority,
 				})
-				seen[info.Type] = true
+				seen[entry.Type] = true
 				break // only need one match per type
 			}
 		}
