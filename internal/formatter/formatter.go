@@ -193,7 +193,17 @@ func (f *Formatter) formatJSON(versions []*parser.VersionInfo) string {
 func (f *Formatter) FormatSingle(v *parser.VersionInfo) string {
 	switch f.cfg.OutputFormat {
 	case "json":
-		data, _ := json.Marshal(v)
+		// Use same JSON structure as formatJSON for consistency
+		jv := struct {
+			Type    string `json:"type"`
+			Version string `json:"version"`
+			Source  string `json:"source"`
+		}{
+			Type:    v.Type,
+			Version: v.Version,
+			Source:  v.Source,
+		}
+		data, _ := json.Marshal(jv)
 		return string(data)
 	case "plain":
 		return f.formatSinglePlain(v)

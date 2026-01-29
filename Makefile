@@ -98,14 +98,19 @@ release: build-all ## Create release archives
 	@for platform in $(PLATFORMS); do \
 		os=$${platform%/*}; \
 		arch=$${platform#*/}; \
-		binary=bin/$(BINARY_NAME)_$${os}_$${arch}; \
-		if [ "$$os" = "windows" ]; then binary=$${binary}.exe; fi; \
+		binary_name=$(BINARY_NAME)_$${os}_$${arch}; \
+		binary=bin/$${binary_name}; \
+		if [ "$$os" = "windows" ]; then binary=$${binary}.exe; binary_name=$${binary_name}.exe; fi; \
 		archive=dist/$(BINARY_NAME)_$(VERSION)_$${os}_$${arch}; \
+		staging=$$(mktemp -d); \
+		cp $$binary README.md LICENSE "$$staging/"; \
 		if [ "$$os" = "windows" ]; then \
-			zip $${archive}.zip -j $$binary README.md LICENSE; \
+			(cd "$$staging" && zip -j $${archive}.zip $${binary_name} README.md LICENSE); \
+			mv "$$staging"/$${archive}.zip dist/; \
 		else \
-			tar -czvf $${archive}.tar.gz -C bin $(BINARY_NAME)_$${os}_$${arch} -C .. README.md LICENSE; \
+			tar -czvf $${archive}.tar.gz -C "$$staging" $${binary_name} README.md LICENSE; \
 		fi; \
+		rm -rf "$$staging"; \
 	done
 	@cd dist && sha256sum * > checksums.txt
 	@echo "Release archives in dist/"

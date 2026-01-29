@@ -265,7 +265,8 @@ func run(cfg *config.Config) (string, error) {
 	}
 
 	// Cache the results (all versions, not filtered)
-	c.Set(cfg.Directory, versions)
+	// Ignore cache write errors - caching is optional and non-critical
+	_ = c.Set(cfg.Directory, versions)
 
 	// Format output
 	f := formatter.New(cfg)
@@ -346,8 +347,8 @@ func printUsage() {
 	fmt.Println("  TMUX_PKG_SUFFIX          Output suffix")
 	fmt.Println()
 	fmt.Println("EXAMPLES:")
-	fmt.Println("  # Basic usage in tmux.conf:")
-	fmt.Println("  set -g status-right '#{E:tmux_package_status}'")
+	fmt.Println("  # Basic usage in tmux.conf (with TPM):")
+	fmt.Println("  set -g status-right '#{@package-status}'")
 	fmt.Println()
 	fmt.Println("  # Show only Node.js and Go versions:")
 	fmt.Println("  tmux-package-status -m node,go")

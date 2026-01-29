@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -395,8 +396,11 @@ func (p *Parser) parseGo(pf detector.PackageFile) (string, string, error) {
 
 // parseRust extracts Rust version from Cargo.toml or toolchain
 func (p *Parser) parseRust(pf detector.PackageFile) (string, string, error) {
+	// Get the directory containing the package file
+	dir := filepath.Dir(pf.Path)
+
 	// Check for rust-toolchain.toml first
-	toolchainPath := strings.Replace(pf.Path, pf.Filename, "rust-toolchain.toml", 1)
+	toolchainPath := filepath.Join(dir, "rust-toolchain.toml")
 	if content, err := os.ReadFile(toolchainPath); err == nil {
 		re := regexp.MustCompile(`channel\s*=\s*"([^"]+)"`)
 		if matches := re.FindStringSubmatch(string(content)); len(matches) > 1 {
@@ -405,7 +409,7 @@ func (p *Parser) parseRust(pf detector.PackageFile) (string, string, error) {
 	}
 
 	// Check for rust-toolchain file
-	toolchainPath = strings.Replace(pf.Path, pf.Filename, "rust-toolchain", 1)
+	toolchainPath = filepath.Join(dir, "rust-toolchain")
 	if content, err := os.ReadFile(toolchainPath); err == nil {
 		version := strings.TrimSpace(string(content))
 		if version != "" {
